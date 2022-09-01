@@ -815,7 +815,10 @@ network *create_net_in(list *sections)
     //list *sections = read_cfg(filename);
     node *n = sections->front;
     if (!n)
+    {
         error("Config file has no sections");
+    }
+
     network *net = make_network(sections->size - 1);
 
     net->gpu_index = gpu_index;
@@ -826,7 +829,9 @@ network *create_net_in(list *sections)
 
     //printf("Option size: %d\n",options->size);
     if (!is_network(s))
+    {
         error("First section must be [net] or [network]");
+    }
 
     parse_net_options(options, net); //SGX OK
 
@@ -843,16 +848,10 @@ network *create_net_in(list *sections)
     int count = 0;
     ocall_free_sec(s);
 
-#ifdef DNET_SGX_DEBUG
-    printf("layer     filters    size              input                output\n");
-#endif
-
     while (n)
     {
         params.index = count;
-#ifdef DNET_SGX_DEBUG
-        printf("%5d ", count);
-#endif
+
         s = (section *)n->val;
         options = s->options;
         layer l = {0};
@@ -971,9 +970,6 @@ network *create_net_in(list *sections)
         }
         else
         {
-#ifdef DNET_SGX_DEBUG
-            printf("Type not recognized: %s\n", s->type);
-#endif
         }
 
         l.clip = net->clip;
@@ -1002,7 +998,7 @@ network *create_net_in(list *sections)
         }
     }
 
-    DEBUG_PRINT();
+   
     ocall_free_list(sections);
     layer out = get_network_output_layer(net);
     net->outputs = out.outputs;

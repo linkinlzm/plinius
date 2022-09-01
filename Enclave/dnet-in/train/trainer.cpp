@@ -5,14 +5,18 @@
 #include "mirroring/dnet_mirror.h"
 #include "mirroring/nvdata.h"
 #include "checks.h"
+#include "plinius_common.h"
 
 #define NUM_ITERATIONS 10
+
+#define LOG_FREQ 1
 
 comm_info *comm_in = nullptr;
 NVData *pm_data = nullptr;
 data train;
 size_t batch_size = 0;
 int count;
+
 //define enc_key; this will be provisioned via remote attestation
 unsigned char enc_key[16] = {0x76, 0x39, 0x79, 0x24, 0x42, 0x26, 0x45, 0x28, 0x48, 0x2b, 0x4d, 0x3b, 0x62, 0x51, 0x5e, 0x8f};
 
@@ -21,7 +25,7 @@ network *net = nullptr;
 NVModel *nv_net = nullptr;
 
 /**
- * Pxxxx
+ * Peterson Yuhala
  * The network training avg accuracy should decrease
  * as the network learns
  * Batch size: the number of data samples read for one training epoch/iteration
@@ -105,7 +109,7 @@ void get_pm_batch()
         abort(); //abort training
     }
 
-    if (count % 5 == 0)
+    if (count % LOG_FREQ == 0)
     {
         //print this every 10 iters
         printf("Reading and decrypting batch of: %d from PM\n", batch_size);
@@ -142,8 +146,8 @@ void ecall_trainer(list *sections, data *training_data, int bsize, comm_info *in
 
 void train_mnist(list *sections, data *training_data, int pmem)
 {
-    //TODO: commer checks
-    printf("Training mnist in enclave..\n");
+
+    PLINIUS_INFO("------Training mnist in enclave..----------\n");
 
     srand(12345);
     float avg_loss = 0;
@@ -165,16 +169,16 @@ void train_mnist(list *sections, data *training_data, int pmem)
     {
         //mirror in and resume training
         nv_net->mirror_in(net, &avg_loss);
-        }
+    }
 
     int epoch = (*net->seen) / N;
     count = 0;
     num_params = get_param_size(net);
     comm_in->model_size = (double)(num_params * 4) / (1024 * 1024);
 
-    printf("Max batches: %d\n", net->max_batches);
-    printf("Net batch size: %d\n", net->batch);
-    printf("Number of params: %d Model size: %f\n", num_params, comm_in->model_size);
+    PLINIUS_INFO("Max batches: %d\n", net->max_batches);
+    PLINIUS_INFO("Net batch size: %d\n", net->batch);
+    PLINIUS_INFO("Number of params: %d  Model size: %f MB \n", num_params, comm_in->model_size);
 
     //set batch size
     batch_size = net->batch;
@@ -206,26 +210,26 @@ void train_mnist(list *sections, data *training_data, int pmem)
         //one training iteration
         loss = train_network_sgd(net, train, 1);
 
-        if (avg_loss == -1)
+        if (avg_loss < 0)
         {
             avg_loss = loss;
         }
 
-        avg_loss = avg_loss * .95 + loss * .05;
+        avg_loss = avg_loss * .9 + loss * .1;
         epoch = (*net->seen) / N;
 
         progress = ((double)cur_batch / net->max_batches) * 100;
-        if (cur_batch % 5 == 0)
-        { //print benchmark progress every 10 iters
-            printf("Batch num: %ld, Seen: %.3f: Loss: %f, Avg loss: %f avg, L. rate: %f, Progress: %.2f%% \n",
-                   cur_batch, (float)(*net->seen) / N, loss, avg_loss, get_current_rate(net), progress);
+        if (cur_batch % LOG_FREQ == 0)
+        { //print benchmark progress every LOG_FREQ iters
+            PLINIUS_INFO("Batch num: %ld, Avg loss: %f avg, L. rate: %f, Progress: %.2f%% \n",
+                         cur_batch, avg_loss, get_current_rate(net), progress);
         }
 
         //mirror model out to PM
         nv_net->mirror_out(net, &avg_loss);
     }
 
-    printf("Done training mnist network..\n");
+    PLINIUS_INFO("Done training mnist network..\n");
     free_network(net);
 }
 
@@ -274,17 +278,17 @@ void test_mnist(list *sections, data *test_data, int pmem)
     if (nv_net != nullptr)
     {
         nv_net->mirror_in(net, &avg_loss);
-        printf("Mirrored net in for testing\n");
+        PLINIUS_INFO("Mirrored net in for testing\n");
     }
 
     if (net == NULL)
     {
-        printf("No neural network in enclave..\n");
+        PLINIUS_INFO("No neural network in enclave..\n");
         return;
     }
     srand(12345);
 
-    printf("-----Beginning mnist testing----\n");
+    PLINIUS_INFO("-----Beginning mnist testing----\n");
     float avg_acc = 0;
     data test = *test_data;
     float *acc = network_accuracies(net, test, 2);
