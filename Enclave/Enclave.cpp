@@ -21,10 +21,10 @@ uint8_t *base_addr_in = NULL; //this will receive the value of the
 
 int __cxa_thread_atexit(void (*dtor)(void *), void *obj, void *dso_symbol) {}
 
-void printf(const char *fmt, ...)
-{
-    PRINT_BLOCK();
-}
+// void printf(const char *fmt, ...)
+// {
+//     PRINT_BLOCK();
+// }
 
 void sgx_printf(const char *fmt, ...)
 {

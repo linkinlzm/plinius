@@ -5,11 +5,17 @@
 
 ######## SGX SDK Settings ########
 
-SGX_SDK ?= /opt/intel/sgxsdk
+SGX_SDK ?= $(abspath ../../SGXSan/install)
 SGX_MODE ?= SIM
 SGX_ARCH ?= x64
 SGX_DEBUG ?= 1
-ROM_CXX ?= g++-8 
+# ROM_CXX ?= g++-8 
+
+CXX := clang++-13
+CC := clang-13
+LD := lld
+OBJCOPY := objcopy
+
 
 ifeq ($(shell getconf LONG_BIT), 32)
 	SGX_ARCH := x86
@@ -59,7 +65,12 @@ endif
 App_Cpp_Files := $(wildcard App/*.cpp) 
 App_Include_Paths := -IInclude -IApp -I$(SGX_SDK)/include
 
-App_C_Flags := -fPIC -Wno-attributes $(App_Include_Paths)
+App_C_Flags := -fPIC -Wno-attributes $(App_Include_Paths) \
+	-flegacy-pass-manager \
+	-Xclang -load -Xclang $(SGX_SDK)/lib64/libSGXFuzzerPass.so \
+	-fsanitize-coverage=inline-8bit-counters,bb,no-prune,pc-table,trace-cmp \
+	-fprofile-instr-generate \
+	-fcoverage-mapping
 
 # Three configuration modes - Debug, prerelease, release
 #   Debug - Macro DEBUG enabled.
@@ -75,7 +86,15 @@ endif
 
 App_Cpp_Flags := $(App_C_Flags) $(SGX_COMMON_CXXFLAGS)
 App_C_Flags += $(SGX_COMMON_CFLAGS)
-App_Link_Flags := -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -lpthread -lm
+App_Link_Flags := -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -lpthread -lm \
+	-ldl \
+	-Wl,-rpath=$(SGX_LIBRARY_PATH) \
+	-Wl,-whole-archive -lSGXSanRTApp -Wl,-no-whole-archive \
+	-lSGXFuzzerRT \
+	-lcrypto \
+	-lboost_program_options \
+	-rdynamic \
+	-fprofile-instr-generate
 
 ifneq ($(SGX_MODE), HW)
 	App_Link_Flags += -lsgx_uae_service_sim
@@ -150,8 +169,12 @@ Rom_Cpp_Objects := RomulusLogSGX.o malloc.o ThreadRegistry.o
 Enclave_Cpp_Files := Enclave/Enclave.cpp $(wildcard Enclave/mirroring/*.cpp) $(wildcard Enclave/crypto/*.cpp) 
 Enclave_Include_Paths := -IInclude -IEnclave -IEnclave/romulus -IEnclave/romulus/romuluslog -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/libcxx 
 
-Enclave_C_Flags := -nostdinc -fvisibility=hidden -fpie -fstack-protector $(Enclave_Include_Paths)
-Enclave_Cpp_Flags := $(Enclave_C_Flags) $(SGX_COMMON_CXXFLAGS) -nostdinc++
+Enclave_C_Flags := -fvisibility=hidden -fpie -fstack-protector $(Enclave_Include_Paths) \
+	-flto -fno-discard-value-names \
+	-fsanitize-coverage=inline-8bit-counters,bb,no-prune,pc-table,trace-cmp \
+	-fprofile-instr-generate -fcoverage-mapping
+
+Enclave_Cpp_Flags := $(Enclave_C_Flags) $(SGX_COMMON_CXXFLAGS)
 Enclave_C_Flags += $(SGX_COMMON_CFLAGS)
 
 # Enable the security flags
@@ -172,13 +195,21 @@ Enclave_Security_Link_Flags := -Wl,-z,relro,-z,now,-z,noexecstack
 #  -Wl,--no-whole-archive with -l$(TRTS_LIBRARY) and before the linker options 
 #  for other libraries (e.g., -lsgx_tstdc).
 Enclave_Link_Flags := $(Enclave_Security_Link_Flags) \
-    -Wl,--no-undefined -nostdlib -nodefaultlibs -nostartfiles -L$(SGX_LIBRARY_PATH) \
-	-Wl,--whole-archive  -l$(Trts_Library_Name) -Wl,--no-whole-archive \
-	-Wl,--start-group -lsgx_tstdc -lsgx_tcxx -l$(Crypto_Library_Name) -l$(Service_Library_Name) -Wl,--end-group \
-	-Wl,-Bstatic -Wl,-Bsymbolic -Wl,--no-undefined \
-	-Wl,-pie,-eenclave_entry -Wl,--export-dynamic  \
+    -L$(SGX_LIBRARY_PATH) \
+	-Wl,--whole-archive -lSGXSanRTEnclave -l$(Trts_Library_Name) -Wl,--no-whole-archive \
+	-Wl,--start-group -l$(Crypto_Library_Name) -l$(Service_Library_Name) -Wl,--end-group \
+	-Wl,-Bsymbolic \
+	-eenclave_entry -Wl,--export-dynamic  \
 	-Wl,--defsym,__ImageBase=0 \
-	-Wl,--version-script=Enclave/Enclave.lds
+	-Wl,--version-script=Enclave/Enclave.lds \
+	-fuse-ld=$(LD) \
+	-Wl,-save-temps \
+	-Wl,--lto-legacy-pass-manager \
+	-Wl,-mllvm=-load=$(SGX_LIBRARY_PATH)/libSGXSanPass.so \
+	-Wl,-mllvm=-enable-slsan=false \
+	-Wl,-mllvm=--stat=false \
+	--shared \
+	-fprofile-instr-generate
 
 Enclave_Cpp_Objects := $(Enclave_Cpp_Files:.cpp=.o)
 
@@ -224,7 +255,7 @@ obj:
 
 
 App/Enclave_u.h: $(SGX_EDGER8R) Enclave/Enclave.edl	
-	@cd App && $(SGX_EDGER8R) --untrusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include
+	@cd App && $(SGX_EDGER8R) --untrusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include --dump-parse ../Enclave.edl.json
 	@echo "GEN  =>  $@"
 
 App/Enclave_u.c: App/Enclave_u.h
@@ -247,6 +278,9 @@ $(DNET_OUT_BASE)/obj/%.o: $(DNET_OUT_BASE)/src/%.cpp $(DNET_DEPS_OUT)
 
 App/%.o: App/%.cpp App/Enclave_u.h
 	@$(CXX) $(App_Cpp_Flags) -c $< -o $@
+	@$(OBJCOPY) --redefine-sym main=__hidden_main \
+		--redefine-sym global_eid=__hidden_global_eid \
+		$@
 	@echo "CXX  <=  $<"
 
 $(App_Name): App/Enclave_u.o $(App_Cpp_Objects) $(DNET_OBJS_OUT)
@@ -303,3 +337,5 @@ $(Signed_Enclave_Name): $(Enclave_Name)
 clean:
 	@rm -f $(App_Name) $(Enclave_Name) $(Signed_Enclave_Name) $(App_Cpp_Objects) App/Enclave_u.* $(Enclave_Cpp_Objects) Enclave/Enclave_t.* \
 	$(Rom_Cpp_Objects) $(DNET_IN_BASE)/obj/* $(DNET_OUT_BASE)/obj/* $(DNET_TRAINER_BASE)/*.o 
+	@rm *.edl.json
+	@rm $(Enclave_Name).*
