@@ -50,7 +50,7 @@ endif
 SGX_COMMON_FLAGS += -Wall -Wextra -Winit-self -Wpointer-arith -Wreturn-type \
                     -Waddress -Wsequence-point -Wformat-security \
                     -Wmissing-include-dirs -Wfloat-equal -Wundef -Wshadow \
-                    -Wcast-align -Wcast-qual -Wconversion -Wredundant-decls
+                    -Wcast-align -Wcast-qual -Wconversion -Wredundant-decls -fPIC
 SGX_COMMON_CFLAGS := $(SGX_COMMON_FLAGS) -Wjump-misses-init -Wstrict-prototypes -Wunsuffixed-float-constants
 SGX_COMMON_CXXFLAGS := $(SGX_COMMON_FLAGS) -Wnon-virtual-dtor -std=c++11
 
@@ -159,7 +159,7 @@ Crypto_Library_Name := sgx_tcrypto
 #---------------------------------------------------------
 Rom_Folder :=  Enclave/romulus
 Rom_Include_Paths := -I$(Rom_Folder)
-Romulus_Cpp_Flags :=  $(Rom_Include_Paths) #-DPWB_IS_CLFLUSH
+Romulus_Cpp_Flags :=  $(Rom_Include_Paths) -fPIC #-DPWB_IS_CLFLUSH
 Rom_Cpp_Files:= $(Rom_Folder)/romuluslog/RomulusLogSGX.cpp $(Rom_Folder)/romuluslog/malloc.cpp $(Rom_Folder)/common/ThreadRegistry.cpp
 #Rom_Cpp_Objects := $(Rom_Cpp_Files:.cpp=.o)
 Rom_Cpp_Objects := RomulusLogSGX.o malloc.o ThreadRegistry.o
@@ -320,7 +320,7 @@ $(DNET_TRAINER_BASE)/%.o: $(DNET_TRAINER_BASE)/%.cpp $(DNET_DEPS_IN)
 
 
 $(Enclave_Name): Enclave/Enclave_t.o $(Enclave_Cpp_Objects) $(Rom_Cpp_Objects) $(DNET_OBJS_IN) $(TRAINER_OBJ_IN)
-	@$(CXX) $^ -o $@ $(Enclave_Link_Flags)
+	$(CXX) $^ -o $@ $(Enclave_Link_Flags)
 	@echo "LINK =>  $@"
 
 
@@ -329,8 +329,7 @@ $(romulus): $(Rom_Cpp_Files)
 
 
 $(Signed_Enclave_Name): $(Enclave_Name)
-	@$(SGX_ENCLAVE_SIGNER) sign -key Enclave/Enclave_private.pem -enclave $(Enclave_Name) -out $@ -config $(Enclave_Config_File)
-	@echo "SIGN =>  $@"
+	@echo "Skip SIGN =>  $@"
 
 .PHONY: clean 
 
