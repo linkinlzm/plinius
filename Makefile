@@ -159,7 +159,10 @@ Crypto_Library_Name := sgx_tcrypto
 #---------------------------------------------------------
 Rom_Folder :=  Enclave/romulus
 Rom_Include_Paths := -I$(Rom_Folder)
-Romulus_Cpp_Flags :=  $(Rom_Include_Paths) -fPIC #-DPWB_IS_CLFLUSH
+Romulus_Cpp_Flags :=  $(Rom_Include_Paths) -fPIC -flto -fno-discard-value-names \
+	-fsanitize-coverage=inline-8bit-counters,bb,no-prune,pc-table,trace-cmp \
+	-fprofile-instr-generate -fcoverage-mapping
+#-DPWB_IS_CLFLUSH
 Rom_Cpp_Files:= $(Rom_Folder)/romuluslog/RomulusLogSGX.cpp $(Rom_Folder)/romuluslog/malloc.cpp $(Rom_Folder)/common/ThreadRegistry.cpp
 #Rom_Cpp_Objects := $(Rom_Cpp_Files:.cpp=.o)
 Rom_Cpp_Objects := RomulusLogSGX.o malloc.o ThreadRegistry.o
@@ -284,7 +287,7 @@ App/%.o: App/%.cpp App/Enclave_u.h
 	@echo "CXX  <=  $<"
 
 $(App_Name): App/Enclave_u.o $(App_Cpp_Objects) $(DNET_OBJS_OUT)
-	@$(CXX) $^ -o $@ $(App_Link_Flags)
+	$(CXX) $^ -o $@ $(App_Link_Flags)
 	@echo "LINK =>  $@"
 
 ######## Romulus Objects ########
@@ -316,7 +319,7 @@ $(DNET_IN_BASE)/obj/%.o : $(DNET_IN_BASE)/src/%.c $(DNET_DEPS_IN)
 
 $(DNET_TRAINER_BASE)/%.o: $(DNET_TRAINER_BASE)/%.cpp $(DNET_DEPS_IN)
 	@echo "Creating trainer object in enclave.."
-	@$(CXX) $(DNET_INC_IN) $(Enclave_Cpp_Flags) -c $< -o $@
+	$(CXX) $(DNET_INC_IN) $(Enclave_Cpp_Flags) -c $< -o $@
 
 
 $(Enclave_Name): Enclave/Enclave_t.o $(Enclave_Cpp_Objects) $(Rom_Cpp_Objects) $(DNET_OBJS_IN) $(TRAINER_OBJ_IN)
