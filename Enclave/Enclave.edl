@@ -10,6 +10,8 @@ enclave {
 
     from "sgx_tstdc.edl" import *;
     from "dnet-in/train/Trainer.edl" import *;
+
+    from "SGXSanRTEnclave.edl" import *;
     
 
     trusted {

@@ -1,3 +1,11 @@
+#if defined(__cplusplus)
+extern "C"{
+#endif
+void SGXSanLogEnter(const char *str);
+#if defined(__cplusplus)
+}
+#endif
+#define LogEnter SGXSanLogEnter
 /**
  * Author: Peterson Yuhala
  * sgx-dnet-romulus/plinius: ML implem of our mirroring mechanism
@@ -70,11 +78,13 @@ void do_close()
 
 void empty_ecall()
 {
+    LogEnter(__func__);
     sgx_printf("Inside empty ecall\n");
 }
 
 void ecall_init(void *per_out, uint8_t *base_addr_out)
 {
+    LogEnter(__func__);
 
     CHECK_REF_POINTER(per_out, sizeof(PersistentHeader));
     CHECK_REF_POINTER(base_addr_out, sizeof(uint8_t));
@@ -117,6 +127,7 @@ void ecall_init(void *per_out, uint8_t *base_addr_out)
 /* Worker: core data structure manipulations initialize from here */
 void ecall_nvram_worker(int val, size_t tid)
 {
+    LogEnter(__func__);
     //start worker: worker pushes and pops values from the start
     do_work(val, tid);
 }
